@@ -17,7 +17,7 @@
     iframe { position: fixed; left: 0; right: 0; bottom: 0; top: 0; width: 100%; height: 100%; border: 0; background: #e7eef6; }
     body.browser iframe { top: 74px; height: calc(100% - 74px); }
     body.installed .install { display: none; }
-    body.signed-out iframe { opacity: 0; pointer-events: none; }
+    body.signed-out iframe { pointer-events: none; }
     .gate {
       display: none;
       position: fixed;
@@ -80,7 +80,7 @@
     }
   </style>
 </head>
-<body class="signed-out">
+<body>
   <p class="install">To open this full screen, use Share, then <strong>Add to Home Screen</strong>.</p>
   <section class="gate" id="gate">
     <div class="gate-inner">
@@ -95,7 +95,7 @@
       </form>
     </div>
   </section>
-  <iframe id="app" title="This Week" src="https://script.google.com/macros/s/AKfycbyJLwUjWgy36Jm1_NrVRG2mOEIyQUpugBsfo0MUmVgv-GJ0oJ9OYa7ndoRkoQEAUXoo/exec"></iframe>
+  <iframe id="app" title="This Week" src="https://script.google.com/macros/s/AKfycbyJLwUjWgy36Jm1_NrVRG2mOEIyQUpugBsfo0MUmVgv-GJ0oJ9OYa7ndoRkoQEAUXoo/exec?v=8"></iframe>
   <script>
     var key = 'vinnyTaskBoardToken';
     var installed = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
@@ -104,6 +104,8 @@
     var appOrigin = '';
     var pending = null;
     var signingIn = false;
+    var connected = false;
+    var giveUpTimer = null;
     try {
       if (localStorage.getItem(key)) document.body.classList.remove('signed-out');
     } catch (err) {}
@@ -129,33 +131,60 @@
           else localStorage.removeItem(key);
         } catch (err) {}
         if (!data.token) showGate();
-        else if (!signingIn) showApp();
+        else showApp();
       }
       if (data.type === 'task-board-shown') showApp();
+      if (data.type === 'task-board-login-ack') {
+        connected = true;
+        pending = null;
+      }
       if (data.type === 'task-board-login-error') {
         pending = null;
+        clearTimeout(giveUpTimer);
         setBusy(false);
         setError(data.message || 'Sign in failed.');
       }
       if (data.type === 'task-board-ready' && event.source) {
+        connected = true;
         appWindow = event.source;
         appOrigin = event.origin;
         var stored = '';
         try { stored = localStorage.getItem(key) || ''; } catch (err) {}
-        event.source.postMessage({ type: 'task-board-token', token: stored }, event.origin);
+        if (!stored && !signingIn) document.body.classList.add('signed-out');
+        try {
+          event.source.postMessage({ type: 'task-board-token', token: stored }, event.origin || '*');
+        } catch (err) {
+          event.source.postMessage({ type: 'task-board-token', token: stored }, '*');
+        }
         if (pending) sendLogin();
       }
     });
 
+    var sentAt = 0;
     function sendLogin() {
       if (!appWindow || !pending) return;
+      if (sentAt && Date.now() - sentAt < 4000) return;
+      sentAt = Date.now();
       var credentials = pending;
+      try {
+        appWindow.postMessage({
+          type: 'task-board-login',
+          username: credentials.username,
+          password: credentials.password
+        }, appOrigin || '*');
+      } catch (err) {
+        appWindow.postMessage({
+          type: 'task-board-login',
+          username: credentials.username,
+          password: credentials.password
+        }, '*');
+      }
+    }
+    function revealBoard() {
+      clearTimeout(giveUpTimer);
       pending = null;
-      appWindow.postMessage({
-        type: 'task-board-login',
-        username: credentials.username,
-        password: credentials.password
-      }, appOrigin);
+      setBusy(false);
+      document.body.classList.remove('signed-out');
     }
     function showApp() {
       signingIn = false;
@@ -176,10 +205,14 @@
       button.setAttribute('aria-busy', busy ? 'true' : 'false');
       button.textContent = busy ? 'Signing in…' : 'Sign in';
       clearTimeout(slowTimer);
+      clearTimeout(giveUpTimer);
       if (busy) {
         slowTimer = setTimeout(function () {
           if (button.disabled) button.textContent = 'Still signing in…';
         }, 8000);
+        giveUpTimer = setTimeout(function () {
+          if (button.disabled) revealBoard();
+        }, connected ? 40000 : 12000);
       }
     }
     function setError(text) {
