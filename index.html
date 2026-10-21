@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="This Week">
+  <meta name="theme-color" content="#f3efe6">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <title>This Week</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #f3efe6; color: #1d1a16; font: 15px/1.4 "Avenir Next", "Segoe UI", sans-serif; }
+    .install { margin: 0; padding: calc(10px + env(safe-area-inset-top)) 16px 10px; background: #0e5f5c; color: #f7fffe; }
+    iframe { position: fixed; left: 0; right: 0; bottom: 0; top: 0; width: 100%; height: 100%; border: 0; background: #f3efe6; }
+    body.browser iframe { top: 74px; height: calc(100% - 74px); }
+    body.installed .install { display: none; }
+  </style>
+</head>
+<body>
+  <p class="install">To open this full screen, use Share, then <strong>Add to Home Screen</strong>.</p>
+  <iframe id="app" title="This Week" src="https://script.google.com/macros/s/AKfycbyJLwUjWgy36Jm1_NrVRG2mOEIyQUpugBsfo0MUmVgv-GJ0oJ9OYa7ndoRkoQEAUXoo/exec"></iframe>
+  <script>
+    var installed = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    document.body.classList.add(installed ? 'installed' : 'browser');
+    var key = 'vinnyTaskBoardToken';
+    window.addEventListener('message', function (event) {
+      var data = event.data || {};
+      if (data.type === 'task-board-token') {
+        if (data.token) localStorage.setItem(key, data.token);
+        else localStorage.removeItem(key);
+      }
+      if (data.type === 'task-board-ready' && event.source) {
+        event.source.postMessage({ type: 'task-board-token', token: localStorage.getItem(key) || '' }, event.origin);
+      }
+    });
+  </script>
+</body>
+</html>
